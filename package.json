@@ -1,0 +1,16 @@
+{
+  "name": "twitshot",
+  "version": "1.0.0",
+  "description": "Tweet shotter",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Igor «InoY» Zvyagintsev",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "puppeteer": "^5.2.1",
+    "vk-io": "^4.0.0-rc.30"
+  }
+}
