@@ -1,5 +1,7 @@
+import fs from 'fs'
 import puppeteer from 'puppeteer'
 import VKIO from 'vk-io'
+import nodemailer from 'nodemailer'
 
 import token from './token.js'
 
@@ -11,14 +13,37 @@ const vk = new VK({
     apiMode: 'parallel_selected'
 })
 
-const getScreenshot = async (url) => {
+const SELECTORS = {
+    tw: 'article[role="article"]',
+    tg: '.tgme_page iframe'
+}
+
+const getScreenshot = async (url, site) => {
+    console.log('go to', url)
     await page.goto(url)
 
-    await page.waitForSelector('article[role="article"]')
+    const selector = SELECTORS[site]
+    // console.log('selector is', selector)
 
-    //document.querySelector(`a[href="${$0.attributes.href.value}"]`).closest('article')
+    await page.waitForSelector(selector)
+    const element = await page.$(selector)
+    // console.log('element', element)
 
-    const element = await page.$('article[role="article"]')
+    if (site == 'tg') {
+        // console.log('\n\n================\n\n')
+        const wrapSelector = '.message_media_not_supported_wrap'
+        const frame = await element.contentFrame()
+        // console.log('frame is', frame)
+        await frame.waitForSelector(wrapSelector)
+        const content = fs.readFileSync('/srv/twitshot/tg.css', 'utf8');
+        await frame.addStyleTag({content})
+
+        await frame.evaluate((wrapSelector) => {
+            document.querySelector(wrapSelector).style.display = 'none'
+            // return document.documentElement.innerHTML
+        }, wrapSelector)
+    }
+
     const screenshot = await element.screenshot({
         path: 'screenshot.png',
         omitBackground: true,
@@ -29,6 +54,13 @@ const getScreenshot = async (url) => {
     // await browser.close()
     return screenshot
 }
+
+const transporter = nodemailer.createTransport({sendmail: true}, {
+    from: 'twitshot@inoy.dev',
+    to: 'inoyakaigor@ya.ru',
+    subject: 'Я умер †',
+})
+
 
 ;( async () => {
 
@@ -62,8 +94,16 @@ vk.updates.use(async (context, next) => { // Skip outbox message and handle erro
 vk.updates.hear(/twitter.com/i, async context => {
     const link = context.text.split(' ').find(chunk => /twitter.com/i.test(chunk))
 
-    /* const screenshot =  */await getScreenshot(link)
+    /* const screenshot = */await getScreenshot(link, 'tw')
     // context.sendPhotos(`data:image/png;base64,${screenshot}`)
+    context.sendPhotos('screenshot.png')
+})
+
+vk.updates.hear(/t.me/i, async context => {
+    const link = context.text.split(' ').find(chunk => /t.me/i.test(chunk))
+
+    await getScreenshot(link, 'tg')
+
     context.sendPhotos('screenshot.png')
 })
 
@@ -78,10 +118,24 @@ run().catch(console.error)
 
 process.on('uncaughtException', (reason, p) => {
     console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
+    transporter.sendMail({text: `Бот умер из-за необработанного исключения: ${p}\nreason: ${reason}`})
     process.exit(0)
 })
 
 process.on('unhandledRejection', (reason, p) => {
     console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
+    transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
+    process.exit(0)
+})
+
+process.on('SIGTERM', (reason, p) => {
+    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
+    transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
+    process.exit(0)
+})
+
+process.on('SIGINT', (reason, p) => {
+    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
+    transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
     process.exit(0)
 })
