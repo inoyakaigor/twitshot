@@ -1,0 +1,18 @@
+.tgme_widget_message_photo_wrap.blured:before {
+  -webkit-filter: none;
+  filter: none;
+}
+.tgme_widget_message_video_thumb,
+.tgme_widget_message_roundvideo_thumb,
+.link_preview_video_thumb,
+.tgme_widget_message_game_video_thumb {
+  -webkit-filter: none;
+  filter: none;
+}
+.tgme_widget_message_video.blured {
+  -webkit-filter: none;
+  filter: none;
+}
+.tgme_widget_message_tgsticker img {
+  filter: none;
+}
