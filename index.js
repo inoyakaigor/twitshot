@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import puppeteer from 'puppeteer'
-import VKIO, {Context} from 'vk-io'
+import VKIO from 'vk-io'
 import nodemailer from 'nodemailer'
 
 import token from './token.js'
@@ -91,18 +91,23 @@ const makeScreenshot = async (socnet, context) => {
     makeScreenshotAndSend(link, socnet, context)
 }
 
-const transporter = nodemailer.createTransport({sendmail: true}, {
-    from: 'linkshot@inoy.dev',
-    to: 'inoyakaigor@ya.ru',
-    subject: 'Я умер †',
+const transporter = nodemailer.createTransport({
+    sendmail: true,
+    newline: 'unix',
+    path: '/usr/sbin/sendmail',
 })
 
+const MAIL_DEFAULTS = {
+    from: 'twitshot@inoy.dev',
+    to: 'inoyakaigor@ya.ru',
+    subject: 'Бот умер',
+}
 
 ;( async () => {
 
 const browser = await puppeteer.launch({
     headless: true,
-    args: ['--window-size=1280,1920', /*'--no-sandbox'/*, '--disable-setuid-sandbox'*/]
+    args: ['--window-size=1280,1920', '--no-sandbox'/*, '--disable-setuid-sandbox'*/]
 })
 
 const page = await browser.newPage()
@@ -122,28 +127,24 @@ vk.updates.use(async (context, next) => { // Skip outbox message and handle erro
     try {
         await next()
     } catch (error) {
-        console.log(`Ошибка при работе с VK API`, error)
+        console.log(`Ошибка в работе`, error)
         process.exit(0)
     }
 })
 
 
 vk.updates.on('message', async (context, next) => {
-    if (Number(context.peerId) != 2000000002) {
-        console.log('\nУДОЛИ\n')
+    if (context.hasAttachments('link')) {
+        const attachments = context.getAttachments('link')
 
-        if (context.hasAttachments('link')) {
-            const attachments = context.getAttachments('link')
-
-            attachments.forEach(attachment => {
-                for (const socnet in SOC_NETS) {
-                    if (SOC_NETS[socnet].regexp.test(attachment.url)) {
-                        makeScreenshotAndSend(attachment.url, socnet, context)
-                        break
-                    }
+        attachments.forEach(attachment => {
+            for (const socnet in SOC_NETS) {
+                if (SOC_NETS[socnet].regexp.test(attachment.url)) {
+                    makeScreenshotAndSend(attachment.url, socnet, context)
+                    break
                 }
-            })
-        }
+            }
+        })
     }
 
     await next()
@@ -163,25 +164,42 @@ run().catch(console.error)
 })()
 
 process.on('uncaughtException', (reason, p) => {
-    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    // transporter.sendMail({text: `Бот умер из-за необработанного исключения: ${p}\nreason: ${reason}`})
-    process.exit(0)
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': uncaughtException',
+        text: `Бот умер из-за непойманного исключения: ${reason}`
+    }, () => process.exit(0))
 })
 
 process.on('unhandledRejection', (reason, p) => {
-    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    // transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
-    process.exit(0)
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': unhandledRejection',
+        text: `Бот умер из-за необработанного исключения: ${reason}`
+    }, () => process.exit(0)
+    )
 })
 
 process.on('SIGTERM', (reason, p) => {
-    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    // transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
-    process.exit(0)
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': SIGTERM',
+        text: `Бот умер из-за завершения процесса Node: ${reason}`
+    }, () => process.exit(0))
 })
 
 process.on('SIGINT', (reason, p) => {
-    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    // transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
-    process.exit(0)
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': SIGINT',
+        text: `Бот умер из-за сигнала прерывания процесса: ${reason}`
+    }, () => process.exit(0))
+})
+
+process.on('exit', (reason, p) => {
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': EXIT',
+        text: `Бот умер из-за остановки процесса: ${reason}`
+    }, () => process.exit(0))
 })
