@@ -19,7 +19,7 @@ const SELECTORS = {
 }
 
 const getScreenshot = async (url, site) => {
-    console.log('go to', url)
+    // console.log('go to', url)
     await page.goto(url)
 
     const selector = SELECTORS[site]
@@ -34,12 +34,19 @@ const getScreenshot = async (url, site) => {
         const wrapSelector = '.message_media_not_supported_wrap'
         const frame = await element.contentFrame()
         // console.log('frame is', frame)
-        await frame.waitForSelector(wrapSelector)
+        try {
+            await frame.waitForSelector(wrapSelector)
+        } catch {
+            console.log('Не дождался селектора')
+        }
         const content = fs.readFileSync('/srv/twitshot/tg.css', 'utf8');
         await frame.addStyleTag({content})
 
         await frame.evaluate((wrapSelector) => {
-            document.querySelector(wrapSelector).style.display = 'none'
+            const tmp = document.querySelector(wrapSelector)
+            if (tmp) {
+                tmp.style.display = 'none'
+            }
             // return document.documentElement.innerHTML
         }, wrapSelector)
     }
@@ -55,18 +62,23 @@ const getScreenshot = async (url, site) => {
     return screenshot
 }
 
-const transporter = nodemailer.createTransport({sendmail: true}, {
-    from: 'twitshot@inoy.dev',
-    to: 'inoyakaigor@ya.ru',
-    subject: 'Я умер †',
+const transporter = nodemailer.createTransport({
+    sendmail: true,
+    newline: 'unix',
+    path: '/usr/sbin/sendmail',
 })
 
+const MAIL_DEFAULTS = {
+    from: 'twitshot@inoy.dev',
+    to: 'inoyakaigor@ya.ru',
+    subject: 'Бот умер',
+}
 
 ;( async () => {
 
 const browser = await puppeteer.launch({
     headless: true,
-    args: ['--window-size=1280,1920', /*'--no-sandbox'/*, '--disable-setuid-sandbox'*/]
+    args: ['--window-size=1280,1920', '--no-sandbox'/*, '--disable-setuid-sandbox'*/]
 })
 
 const page = await browser.newPage()
@@ -83,16 +95,19 @@ vk.updates.use(async (context, next) => { // Skip outbox message and handle erro
         return
     }
 
+    // Promise.reject('режект')
+
     try {
         await next()
     } catch (error) {
-        console.log(`Ошибка при работе с VK API`, error)
+        console.log(`Ошибка в работе`, error)
         process.exit(0)
     }
 })
 
 vk.updates.hear(/twitter.com/i, async context => {
-    const link = context.text.split(' ').find(chunk => /twitter.com/i.test(chunk))
+    const link = context.text.split(/\s|\n/gim).find(chunk => /twitter.com/i.test(chunk))
+    // console.log(link)
 
     /* const screenshot = */await getScreenshot(link, 'tw')
     // context.sendPhotos(`data:image/png;base64,${screenshot}`)
@@ -100,7 +115,7 @@ vk.updates.hear(/twitter.com/i, async context => {
 })
 
 vk.updates.hear(/t.me/i, async context => {
-    const link = context.text.split(' ').find(chunk => /t.me/i.test(chunk))
+    const link = context.text.split(/\s|\n/gim).find(chunk => /t.me/i.test(chunk))
 
     await getScreenshot(link, 'tg')
 
@@ -117,25 +132,42 @@ run().catch(console.error)
 })()
 
 process.on('uncaughtException', (reason, p) => {
-    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    transporter.sendMail({text: `Бот умер из-за необработанного исключения: ${p}\nreason: ${reason}`})
-    process.exit(0)
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': uncaughtException',
+        text: `Бот умер из-за непойманного исключения: ${reason}`
+    }, () => process.exit(0))
 })
 
 process.on('unhandledRejection', (reason, p) => {
-    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
-    process.exit(0)
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': unhandledRejection',
+        text: `Бот умер из-за необработанного исключения: ${reason}`
+    }, () => process.exit(0)
+    )
 })
 
 process.on('SIGTERM', (reason, p) => {
-    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
-    process.exit(0)
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': SIGTERM',
+        text: `Бот умер из-за завершения процесса Node: ${reason}`
+    }, () => process.exit(0))
 })
 
 process.on('SIGINT', (reason, p) => {
-    console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
-    process.exit(0)
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': SIGINT',
+        text: `Бот умер из-за сигнала прерывания процесса: ${reason}`
+    }, () => process.exit(0))
+})
+
+process.on('exit', (reason, p) => {
+    transporter.sendMail({
+        ...MAIL_DEFAULTS,
+        subject: MAIL_DEFAULTS.subject + ': EXIT',
+        text: `Бот умер из-за остановки процесса: ${reason}`
+    }, () => process.exit(0))
 })
