@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import puppeteer from 'puppeteer'
 import VKIO from 'vk-io'
+import {HearManager} from '@vk-io/hear'
 import nodemailer from 'nodemailer'
 
 import token from './token.js'
@@ -13,6 +14,8 @@ const vk = new VK({
     pollingGroupId: 197617619,
     apiMode: 'parallel_selected'
 })
+
+const hearManager = new HearManager()
 
 const SOC_NETS = {
     tw: {
@@ -119,6 +122,8 @@ await page.setViewport({
 
 globalThis.page = page
 
+vk.updates.on('message_new', hearManager.middleware)
+
 vk.updates.use(async (context, next) => { // Skip outbox message and handle errors
     if (context.type === 'message' && context.isOutbox) {
         return
@@ -150,12 +155,21 @@ vk.updates.on('message', async (context, next) => {
     await next()
 })
 
+/* hearManager.hear(/http(.+)\.mp4/gi, async context => {
+    const link = context.text.split(' ').find(chunk => /http(.+)\.mp4/gi.test(chunk))
+
+    const attachment = await vk.upload.video({
+        peer_id: context.peerId,
+        link
+    })
+}) */
+
 async function run() {
     await vk.updates.startPolling()
     console.log('Polling started')
 
     Object.keys(SOC_NETS).forEach(socnet => {
-        vk.updates.hear(SOC_NETS[socnet].regexp, makeScreenshot.bind(this, socnet))
+        hearManager.hear(SOC_NETS[socnet].regexp, makeScreenshot.bind(this, socnet))
     })
 }
 
