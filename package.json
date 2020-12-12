@@ -10,8 +10,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@vk-io/hear": "^1.0.2",
     "nodemailer": "^6.4.11",
-    "puppeteer": "^5.2.1",
-    "vk-io": "^4.0.0-rc.30"
+    "puppeteer": "^5.5.0",
+    "vk-io": "^4.1.1"
   }
 }
