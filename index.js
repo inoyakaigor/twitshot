@@ -1,6 +1,7 @@
 import fs from 'fs'
+import path from 'path'
 import puppeteer from 'puppeteer'
-import VKIO from 'vk-io'
+import VKIO, {Context} from 'vk-io'
 import nodemailer from 'nodemailer'
 
 import token from './token.js'
@@ -13,50 +14,85 @@ const vk = new VK({
     apiMode: 'parallel_selected'
 })
 
-const SELECTORS = {
-    tw: 'article[role="article"]',
-    tg: '.tgme_page iframe'
+const SOC_NETS = {
+    tw: {
+        selector :'article[role="article"]',
+        regexp: /twitter.com/i
+    },
+    tg: {
+        selector: '.tgme_page iframe',
+        regexp: /t.me/i
+    }
 }
 
-const getScreenshot = async (url, site) => {
-    console.log('go to', url)
-    await page.goto(url)
+const getScreenshot = async (link, socnet) => {
+    const {selector} = SOC_NETS[socnet]
 
-    const selector = SELECTORS[site]
-    // console.log('selector is', selector)
+    let screenshot
 
-    await page.waitForSelector(selector)
-    const element = await page.$(selector)
-    // console.log('element', element)
+    await page.goto(link)
 
-    if (site == 'tg') {
-        // console.log('\n\n================\n\n')
-        const wrapSelector = '.message_media_not_supported_wrap'
-        const frame = await element.contentFrame()
-        // console.log('frame is', frame)
-        await frame.waitForSelector(wrapSelector)
-        const content = fs.readFileSync('/srv/twitshot/tg.css', 'utf8');
-        await frame.addStyleTag({content})
+    try {
+        await page.waitForSelector(selector)
+        const element = await page.$(selector)
 
-        await frame.evaluate((wrapSelector) => {
-            document.querySelector(wrapSelector).style.display = 'none'
-            // return document.documentElement.innerHTML
-        }, wrapSelector)
+        if (socnet == 'tg') {
+            const wrapSelector = '.message_media_not_supported_wrap'
+            const frame = await element.contentFrame()
+            const content = fs.readFileSync('./tg.css', 'utf8')
+            await frame.addStyleTag({content})
+
+            await frame.evaluate((wrapSelector) => {
+                const wrapperNode = document.querySelector(wrapSelector)
+                if (wrapperNode?.style) {
+                    wrapperNode.style.display = 'none'
+                }
+            }, wrapSelector)
+        }
+
+        screenshot = await element.screenshot({
+            path: 'screenshot.png',
+            omitBackground: true,
+            // encoding: 'base64'
+        })
+    } catch (e) {
+        console.log('🔥 ОШИБКА!', e.message)
+
+        await page.screenshot({
+            path: 'error_screenshot.png',
+            omitBackground: true,
+            // encoding: 'base64'
+        })
+
+        transporter.sendMail({
+            text: `Бот умер из-за необработанного исключения: ${e.message}`,
+            attachments: [{
+                filename: 'error_screenshot.png'
+            }]
+        })
+
+        process.exit(1)
     }
 
-    const screenshot = await element.screenshot({
-        path: 'screenshot.png',
-        omitBackground: true,
-        // encoding: 'base64'
-    })
-
-    await page.goto('about:blank')
-    // await browser.close()
+    /* await */ page.goto('about:blank')
     return screenshot
 }
 
+const makeScreenshotAndSend = async (link, socnet, context) => {
+    await getScreenshot(link, socnet)
+    context.sendPhotos('screenshot.png')
+}
+
+const makeScreenshot = async (socnet, context) => {
+    const {regexp} = SOC_NETS[socnet]
+
+    const link = context.text.split(' ').find(chunk => regexp.test(chunk))
+
+    makeScreenshotAndSend(link, socnet, context)
+}
+
 const transporter = nodemailer.createTransport({sendmail: true}, {
-    from: 'twitshot@inoy.dev',
+    from: 'linkshot@inoy.dev',
     to: 'inoyakaigor@ya.ru',
     subject: 'Я умер †',
 })
@@ -91,25 +127,35 @@ vk.updates.use(async (context, next) => { // Skip outbox message and handle erro
     }
 })
 
-vk.updates.hear(/twitter.com/i, async context => {
-    const link = context.text.split(' ').find(chunk => /twitter.com/i.test(chunk))
 
-    /* const screenshot = */await getScreenshot(link, 'tw')
-    // context.sendPhotos(`data:image/png;base64,${screenshot}`)
-    context.sendPhotos('screenshot.png')
-})
+vk.updates.on('message', async (context, next) => {
+    if (Number(context.peerId) != 2000000002) {
+        console.log('\nУДОЛИ\n')
 
-vk.updates.hear(/t.me/i, async context => {
-    const link = context.text.split(' ').find(chunk => /t.me/i.test(chunk))
+        if (context.hasAttachments('link')) {
+            const attachments = context.getAttachments('link')
 
-    await getScreenshot(link, 'tg')
+            attachments.forEach(attachment => {
+                for (const socnet in SOC_NETS) {
+                    if (SOC_NETS[socnet].regexp.test(attachment.url)) {
+                        makeScreenshotAndSend(attachment.url, socnet, context)
+                        break
+                    }
+                }
+            })
+        }
+    }
 
-    context.sendPhotos('screenshot.png')
+    await next()
 })
 
 async function run() {
     await vk.updates.startPolling()
     console.log('Polling started')
+
+    Object.keys(SOC_NETS).forEach(socnet => {
+        vk.updates.hear(SOC_NETS[socnet].regexp, makeScreenshot.bind(this, socnet))
+    })
 }
 
 run().catch(console.error)
@@ -118,24 +164,24 @@ run().catch(console.error)
 
 process.on('uncaughtException', (reason, p) => {
     console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    transporter.sendMail({text: `Бот умер из-за необработанного исключения: ${p}\nreason: ${reason}`})
+    // transporter.sendMail({text: `Бот умер из-за необработанного исключения: ${p}\nreason: ${reason}`})
     process.exit(0)
 })
 
 process.on('unhandledRejection', (reason, p) => {
     console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
+    // transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
     process.exit(0)
 })
 
 process.on('SIGTERM', (reason, p) => {
     console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
+    // transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
     process.exit(0)
 })
 
 process.on('SIGINT', (reason, p) => {
     console.log(`Необработанное исключение в: ${p}\nreason: ${reason}`)
-    transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
+    // transporter.sendMail({text: `Бот умер из-за необработанного отказа: ${p}\nreason: ${reason}`})
     process.exit(0)
 })
