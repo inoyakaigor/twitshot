@@ -1,7 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import puppeteer from 'puppeteer'
-import VKIO, {Context} from 'vk-io'
+import VKIO from 'vk-io'
+import {HearManager} from '@vk-io/hear'
 import nodemailer from 'nodemailer'
 
 import token from './token.js'
@@ -13,6 +14,8 @@ const vk = new VK({
     pollingGroupId: 197617619,
     apiMode: 'parallel_selected'
 })
+
+const hearManager = new HearManager()
 
 const SOC_NETS = {
     tw: {
@@ -114,6 +117,8 @@ await page.setViewport({
 
 globalThis.page = page
 
+vk.updates.on('message_new', hearManager.middleware)
+
 vk.updates.use(async (context, next) => { // Skip outbox message and handle errors
     if (context.type === 'message' && context.isOutbox) {
         return
@@ -129,24 +134,29 @@ vk.updates.use(async (context, next) => { // Skip outbox message and handle erro
 
 
 vk.updates.on('message', async (context, next) => {
-    if (Number(context.peerId) != 2000000002) {
-        console.log('\nУДОЛИ\n')
+    if (context.hasAttachments('link')) {
+        const attachments = context.getAttachments('link')
 
-        if (context.hasAttachments('link')) {
-            const attachments = context.getAttachments('link')
-
-            attachments.forEach(attachment => {
-                for (const socnet in SOC_NETS) {
-                    if (SOC_NETS[socnet].regexp.test(attachment.url)) {
-                        makeScreenshotAndSend(attachment.url, socnet, context)
-                        break
-                    }
+        attachments.forEach(attachment => {
+            for (const socnet in SOC_NETS) {
+                if (SOC_NETS[socnet].regexp.test(attachment.url)) {
+                    makeScreenshotAndSend(attachment.url, socnet, context)
+                    break
                 }
-            })
-        }
+            }
+        })
     }
 
     await next()
+})
+
+hearManager.hear(/http(.+)\.mp4/gi, async context => {
+    const link = context.text.split(' ').find(chunk => /http(.+)\.mp4/gi.test(chunk))
+
+    const attachment = await vk.upload.video({
+        peer_id: context.peerId,
+        link
+    })
 })
 
 async function run() {
@@ -154,7 +164,7 @@ async function run() {
     console.log('Polling started')
 
     Object.keys(SOC_NETS).forEach(socnet => {
-        vk.updates.hear(SOC_NETS[socnet].regexp, makeScreenshot.bind(this, socnet))
+        hearManager.hear(SOC_NETS[socnet].regexp, makeScreenshot.bind(this, socnet))
     })
 }
 
