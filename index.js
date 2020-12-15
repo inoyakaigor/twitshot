@@ -1,11 +1,20 @@
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import puppeteer from 'puppeteer'
 import VKIO from 'vk-io'
 import {HearManager} from '@vk-io/hear'
 import nodemailer from 'nodemailer'
 
 import token from './token.js'
+
+if (/ubuntu/i.test(os.version())) {
+    try {
+        process.chdir('/srv/twitshot')
+    } catch (err) {
+        console.error(`chdir: ${err}`)
+    }
+}
 
 const {VK} = VKIO
 
