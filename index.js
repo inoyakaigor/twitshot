@@ -83,7 +83,7 @@ const getScreenshot = async (link, socnet) => {
 
 const makeScreenshotAndSend = async (link, socnet, context) => {
     await getScreenshot(link, socnet)
-    context.sendPhotos('screenshot.png')
+    context.sendPhotos({value: 'screenshot.png'})
 }
 
 const makeScreenshot = async (socnet, context) => {
@@ -181,7 +181,7 @@ process.on('uncaughtException', (reason, p) => {
     transporter.sendMail({
         ...MAIL_DEFAULTS,
         subject: MAIL_DEFAULTS.subject + ': uncaughtException',
-        text: `Бот умер из-за непойманного исключения: ${reason}`
+        text: `Бот умер из-за непойманного исключения: ${reason}\n\n${reason.stack}`
     }, () => process.exit(0))
 })
 
@@ -189,7 +189,7 @@ process.on('unhandledRejection', (reason, p) => {
     transporter.sendMail({
         ...MAIL_DEFAULTS,
         subject: MAIL_DEFAULTS.subject + ': unhandledRejection',
-        text: `Бот умер из-за необработанного исключения: ${reason}`
+        text: `Бот умер из-за необработанного исключения: ${reason}\n\n${reason.stack}`
     }, () => process.exit(0)
     )
 })
