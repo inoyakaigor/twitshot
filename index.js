@@ -80,12 +80,12 @@ const getScreenshot = async (link, socnet) => {
             // encoding: 'base64'
         })
 
-        transporter.sendMail({
+        /*transporter.sendMail({
             text: `Бот умер из-за необработанного исключения: ${e.message}`,
             attachments: [{
                 filename: 'error_screenshot.png'
             }]
-        })
+        })*/
 
         process.exit(1)
     }
@@ -132,6 +132,8 @@ await page.setViewport({
     width: 1280,
     height: 1920
 })
+
+await page.setDefaultTimeout(60000)
 
 globalThis.page = page
 
@@ -223,10 +225,10 @@ process.on('SIGINT', (reason, p) => {
     }, () => process.exit(0))
 })
 
-process.on('exit', (reason, p) => {
+/*process.on('exit', (reason, p) => {
     transporter.sendMail({
         ...MAIL_DEFAULTS,
         subject: MAIL_DEFAULTS.subject + ': EXIT',
         text: `Бот умер из-за остановки процесса: ${reason}`
     }, () => process.exit(0))
-})
+})*/
