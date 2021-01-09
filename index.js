@@ -34,6 +34,10 @@ const SOC_NETS = {
     tg: {
         selector: '.tgme_page iframe',
         regexp: /t.me/i
+    },
+    pkb: {
+        selector: 'article .story__main',
+        regexp: /pikabu.ru\/story/i
     }
 }
 
