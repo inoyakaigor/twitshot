@@ -45,8 +45,17 @@ const getScreenshot = async (link, socnet) => {
     const {selector} = SOC_NETS[socnet]
 
     let screenshot
+    try {
+        await page.goto(link)
+    } catch (e) {
+        transporter.sendMail({
+            ...MAIL_DEFAULTS,
+            subject: MAIL_DEFAULTS.subject,
+            text: `Бот умер из-за неудачного перехода по ссылке: ${link}\n\nУРЛ (🌍): ${globalThis.link}\n\n${e.message}\n\n${e.stack}`
+        }, () => process.exit(0)
+        )
 
-    await page.goto(link)
+    }
 
     try {
         await page.waitForSelector(selector)
@@ -80,12 +89,12 @@ const getScreenshot = async (link, socnet) => {
             // encoding: 'base64'
         })
 
-        /*transporter.sendMail({
-            text: `Бот умер из-за необработанного исключения: ${e.message}`,
+        transporter.sendMail({
+            text: `Бот умер из-за необработанного исключения в getScreenshot: ${e.message}\n\n\ne.stack`,
             attachments: [{
                 filename: 'error_screenshot.png'
             }]
-        })*/
+        })
 
         process.exit(1)
     }
@@ -95,6 +104,7 @@ const getScreenshot = async (link, socnet) => {
 }
 
 const makeScreenshotAndSend = async (link, socnet, context) => {
+    globalThis.link = link
     await getScreenshot(link, socnet)
     context.sendPhotos({value: 'screenshot.png'})
 }
@@ -204,7 +214,7 @@ process.on('unhandledRejection', (reason, p) => {
     transporter.sendMail({
         ...MAIL_DEFAULTS,
         subject: MAIL_DEFAULTS.subject + ': unhandledRejection',
-        text: `Бот умер из-за необработанного исключения: ${reason}\n\n${reason.stack}`
+        text: `Бот умер из-за необработанного исключения: ${reason}\n\nУРЛ:${globalThis.link}\n\n${reason.stack}`
     }, () => process.exit(0)
     )
 })
