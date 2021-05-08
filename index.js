@@ -112,9 +112,15 @@ const makeScreenshotAndSend = async (link, socnet, context) => {
 const makeScreenshot = async (socnet, context) => {
     const {regexp} = SOC_NETS[socnet]
 
-    const link = context.text.split(' ').find(chunk => regexp.test(chunk))
-
-    makeScreenshotAndSend(link, socnet, context)
+    const link = context.text.split(/\s/).find(chunk => regexp.test(chunk))
+    if (link) {
+        try {
+            const url = new URL(link)
+            makeScreenshotAndSend(link, socnet, context)
+        } catch {
+            context.send(`Либо меня беды с башкой, либо вот это «${link}» не URL адрес`)
+        }
+    }
 }
 
 const transporter = nodemailer.createTransport({
@@ -191,14 +197,16 @@ vk.updates.on('message', async (context, next) => {
 
 async function run() {
     await vk.updates.startPolling()
-    console.log('Polling started')
+    console.log('Бот запущен')
 
     Object.keys(SOC_NETS).forEach(socnet => {
         hearManager.hear(SOC_NETS[socnet].regexp, makeScreenshot.bind(this, socnet))
     })
 }
 
-run().catch(console.error)
+run().catch(
+    console.error.bind(console, 'Ошибка запуска бота:\n\n')
+)
 
 })()
 
