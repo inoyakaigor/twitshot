@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import puppeteer from 'puppeteer'
-import VKIO from 'vk-io'
+import {VK} from 'vk-io'
 import {HearManager} from '@vk-io/hear'
 import nodemailer from 'nodemailer'
 
@@ -16,8 +16,6 @@ if (/ubuntu/i.test(os.version())) {
     }
 }
 
-const {VK} = VKIO
-
 const vk = new VK({
     token,
     pollingGroupId: 197617619,
@@ -28,16 +26,20 @@ const hearManager = new HearManager()
 
 const SOC_NETS = {
     tw: {
-        selector :'article[role="article"]',
-        regexp: /twitter.com/i
+        selector: 'article[role="article"]',
+        regexp: /twitter\.com/i
     },
     tg: {
         selector: '.tgme_page iframe',
-        regexp: /t.me/i
+        regexp: /t\.me/i
     },
     pkb: {
         selector: 'article .story__main',
-        regexp: /pikabu.ru\/story/i
+        regexp: /pikabu\.ru\/story/i
+    },
+    inst: {
+        selector: 'article[role="presentation"]',
+        regexp: /instagram.com\/p/i
     }
 }
 
@@ -52,14 +54,33 @@ const getScreenshot = async (link, socnet) => {
             ...MAIL_DEFAULTS,
             subject: MAIL_DEFAULTS.subject,
             text: `Бот умер из-за неудачного перехода по ссылке: ${link}\n\nУРЛ (🌍): ${globalThis.link}\n\n${e.message}\n\n${e.stack}`
-        }, () => process.exit(0)
-        )
-
+        }, () => process.exit(0))
     }
 
+    const isRedirected = !page.url().includes(link)
+
     try {
-        await page.waitForSelector(selector)
-        const element = await page.$(selector)
+        let element
+        if (isRedirected) {
+            if ( // закрытые профили редиректят на страницу логина
+                socnet == 'inst' &&
+                page.url() == 'https://www.instagram.com/accounts/login/'
+            ) {
+                const creds = ['USERNAME', 'PASSWORD']
+                await page.waitForSelector('#loginForm')
+                await page.$$eval('#loginForm input', (inputs, creds) => {
+                    inputs.forEach((input, index) => input.value = creds[index])
+                }, creds)
+                await page.$('[type="submit"]').click()
+                await page.waitForSelector(selector)
+            } else {
+                console.log(`Instagram перенаправил бота куда-то не туда: «${page.url()}»`)
+                return
+            }
+        } else {
+            await page.waitForSelector(selector)
+            element = await page.$(selector)
+        }
 
         if (socnet == 'tg') {
             const wrapSelector = '.message_media_not_supported_wrap'
@@ -73,12 +94,22 @@ const getScreenshot = async (link, socnet) => {
                     wrapperNode.style.display = 'none'
                 }
             }, wrapSelector)
+        } else if (socnet == 'inst') {
+            element = await page.$(selector)
+            await page.$$eval('[style="width: 100%;"]', ([div]) => {
+                console.log('login banner', div)
+
+                if (div && /Войдите/.test(div.textContent)) {
+                    if (div.querySelector('button')) {
+                        div.querySelector('button').click()
+                    }
+                }
+            })
         }
 
         screenshot = await element.screenshot({
             path: 'screenshot.png',
-            omitBackground: true,
-            // encoding: 'base64'
+            omitBackground: true
         })
     } catch (e) {
         console.log('🔥 ОШИБКА!', e.message)
@@ -91,12 +122,13 @@ const getScreenshot = async (link, socnet) => {
 
         transporter.sendMail({
             text: `Бот умер из-за необработанного исключения в getScreenshot: ${e.message}\n\n\ne.stack`,
-            attachments: [{
-                filename: 'error_screenshot.png'
-            }]
-        })
-
-        process.exit(1)
+            /* attachments: [{
+                filename: 'Error screenshot.png',
+                path: path.resolve('error_screenshot.png')
+            }] */
+        }).then(
+            () => process.exit(1)
+        )
     }
 
     /* await */ page.goto('about:blank')
@@ -106,23 +138,37 @@ const getScreenshot = async (link, socnet) => {
 const makeScreenshotAndSend = async (link, socnet, context) => {
     globalThis.link = link
     await getScreenshot(link, socnet)
-    context.sendPhotos({value: 'screenshot.png'})
+    context.sendPhotos({value: 'screenshot.png'})//.then(() => process.exit())
 }
 
 const makeScreenshot = async (socnet, context) => {
     const {regexp} = SOC_NETS[socnet]
 
-    const link = context.text.split(/\s/).find(chunk => regexp.test(chunk))
+    let matchedRegExp
+
+    const link = context.text.split(/\s/).find(chunk => {
+        const result = regexp.test(chunk)
+
+        if (result) {
+            matchedRegExp = regexp
+        }
+
+        return result
+    })
+
     if (link) {
         try {
             const url = new URL(link)
             makeScreenshotAndSend(link, socnet, context)
         } catch {
-            context.send(`Либо меня беды с башкой, либо вот это «${link}» не URL адрес`)
+            context.send(`Либо меня беды с башкой, либо вот это «${link}» не URL адрес сервиса «${socnet}» (совпало с регуляркой: ${matchedRegExp})`)
         }
     }
 }
 
+/* const transporter = {
+    sendMail: console.log
+} */
 const transporter = nodemailer.createTransport({
     sendmail: true,
     newline: 'unix',
