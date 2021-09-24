@@ -43,13 +43,18 @@ const SOC_NETS = {
     }
 }
 
-const getScreenshot = async (link, socnet) => {
+const getScreenshot = async (link, socnet, context) => {
     const {selector} = SOC_NETS[socnet]
 
     let screenshot
     try {
         await page.goto(link)
     } catch (e) {
+        if (e instanceof puppeteer.errors.TimeoutError) {
+            context.send('Пикабу опять долго грузился поэтому хуй вам, а не скриншот')
+            return false
+        }
+
         transporter.sendMail({
             ...MAIL_DEFAULTS,
             subject: MAIL_DEFAULTS.subject,
@@ -137,8 +142,12 @@ const getScreenshot = async (link, socnet) => {
 
 const makeScreenshotAndSend = async (link, socnet, context) => {
     globalThis.link = link
-    await getScreenshot(link, socnet)
+    const result = await getScreenshot(link, socnet, context)
+    if (result === false) {
+        return
+    } else {
     context.sendPhotos({value: 'screenshot.png'})//.then(() => process.exit())
+    }
 }
 
 const makeScreenshot = async (socnet, context) => {
