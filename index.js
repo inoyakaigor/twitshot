@@ -78,6 +78,16 @@ const getScreenshot = async (link, socnet, context) => {
                 }, creds)
                 await page.$('[type="submit"]').click()
                 await page.waitForSelector(selector)
+                } catch (e) {
+                    context.send('У меня не получилось зайти в инсту поэтому хуй вам, а не скриншот')
+
+                    transporter.sendMail({
+                        ...MAIL_DEFAULTS,
+                        subject: 'Бот не сумел',
+                        text: `Бот не смог в инстаграм: ${link}\n\n🌍: ${globalThis.link}\n\n${e.message}\n\n${e.stack}`
+                    })
+                    return false
+                }
             } else {
                 console.log(`Instagram перенаправил бота куда-то не туда: «${page.url()}»`)
                 return
@@ -91,7 +101,7 @@ const getScreenshot = async (link, socnet, context) => {
 
                 transporter.sendMail({
                     ...MAIL_DEFAULTS,
-                    subject: MAIL_DEFAULTS.subject,
+                    subject: 'Бот не сумел',
                     text: `Бот не смог найти селектор ${selector} на странице по ссылке: ${link}\n\n🌍: ${globalThis.link}`
                 })
                 return false
@@ -111,16 +121,25 @@ const getScreenshot = async (link, socnet, context) => {
                 }
             }, wrapSelector)
         } else if (socnet == 'inst') {
+            try {
             element = await page.$(selector)
             await page.$$eval('[style="width: 100%;"]', ([div]) => {
-                console.log('login banner', div)
-
                 if (div && /Войдите/.test(div.textContent)) {
                     if (div.querySelector('button')) {
                         div.querySelector('button').click()
                     }
                 }
             })
+            } catch (e) {
+                context.send('Цукерберг опять ставит палки в колёса маленькому боту поэтому хуй вам, а не скриншот')
+
+                transporter.sendMail({
+                    ...MAIL_DEFAULTS,
+                    subject: 'Бот не сумел',
+                    text: `Бот не смог в инстаграм: ${link}\n\n🌍: ${globalThis.link}\n\n${e.message}\n\n${e.stack}`
+                })
+                return false
+            }
         }
 
         screenshot = await element.screenshot({
