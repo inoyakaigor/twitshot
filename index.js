@@ -83,8 +83,19 @@ const getScreenshot = async (link, socnet, context) => {
                 return
             }
         } else {
+            try {
             await page.waitForSelector(selector)
             element = await page.$(selector)
+            } catch {
+                context.send('Я не долждался когда загрузится нужная страница поэтому хуй вам, а не скриншот')
+
+                transporter.sendMail({
+                    ...MAIL_DEFAULTS,
+                    subject: MAIL_DEFAULTS.subject,
+                    text: `Бот не смог найти селектор ${selector} на странице по ссылке: ${link}\n\n🌍: ${globalThis.link}`
+                })
+                return false
+            }
         }
 
         if (socnet == 'tg') {
