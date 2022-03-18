@@ -16,6 +16,8 @@ if (/ubuntu/i.test(os.version())) {
     }
 }
 
+const TIMEOUT = 300_000
+
 const vk = new VK({
     token,
     pollingGroupId: 197617619,
@@ -37,10 +39,10 @@ const SOC_NETS = {
         selector: 'article .story__main',
         regexp: /pikabu\.ru\/story/i
     },
-    inst: {
+    /* inst: {
         selector: 'article[role="presentation"]',
         regexp: /instagram.com\/p/i
-    }
+    } */
 }
 
 const getScreenshot = async (link, socnet, context) => {
@@ -48,10 +50,20 @@ const getScreenshot = async (link, socnet, context) => {
 
     let screenshot
     try {
-        await page.goto(link)
+        await page.goto(link, {waitUntil: 'networkidle0'})
     } catch (e) {
         if (e instanceof puppeteer.errors.TimeoutError) {
-            context.send('Пикабу опять долго грузился поэтому хуй вам, а не скриншот')
+            context.send(
+                `Я ждал слишком долго /${TIMEOUT / 60_000} минут(ы)/, но больше не могу. Увы!\nПройдите по ссылке ${link} сами`
+            )
+
+            await page.screenshot({
+                path: 'timeouterror_screenshot.png',
+                omitBackground: true,
+                // encoding: 'base64'
+            })
+            await page.close()
+
             return false
         }
 
@@ -69,33 +81,58 @@ const getScreenshot = async (link, socnet, context) => {
         if (isRedirected) {
             if ( // закрытые профили редиректят на страницу логина
                 socnet == 'inst' &&
-                page.url() == 'https://www.instagram.com/accounts/login/'
+                page.url().includes('https://www.instagram.com/accounts/login/')
             ) {
                 const creds = ['USERNAME', 'PASSWORD']
-                await page.waitForSelector('#loginForm')
-                await page.$$eval('#loginForm input', (inputs, creds) => {
-                    inputs.forEach((input, index) => input.value = creds[index])
-                }, creds)
-                await page.$('[type="submit"]').click()
-                await page.waitForSelector(selector)
+                try {
+                    let counter = 0
+                    await page.screenshot({
+                        path: `insta_screenshot_${counter++}.png`,
+                        omitBackground: true,
+                    })
+                    await page.waitForSelector('#loginForm')
+                    await page.screenshot({
+                        path: `insta_screenshot_${counter++}.png`,
+                        omitBackground: true,
+                    })
+                    await page.$$eval('#loginForm input', (inputs, creds) => {
+                        inputs.forEach((input, index) => input.value = creds[index])
+                    }, creds)
+
+                    await page.screenshot({
+                        path: `insta_screenshot_${counter++}.png`,
+                        omitBackground: true,
+                    })
+                    await page.$('[type="submit"]').click()
+
+                    await page.screenshot({
+                        path: `insta_screenshot_${counter++}.png`,
+                        omitBackground: true,
+                    })
+                    await page.waitForSelector(selector)
+
+                    await page.screenshot({
+                        path: `insta_screenshot_${counter++}.png`,
+                        omitBackground: true,
+                    })
                 } catch (e) {
                     context.send('У меня не получилось зайти в инсту поэтому хуй вам, а не скриншот')
 
                     transporter.sendMail({
                         ...MAIL_DEFAULTS,
                         subject: 'Бот не сумел',
-                        text: `Бот не смог в инстаграм: ${link}\n\n🌍: ${globalThis.link}\n\n${e.message}\n\n${e.stack}`
+                        text: `Бот не смог в инстаграм: ${globalThis.link}\n\n${e.message}\n\n${e.stack}`
                     })
                     return false
                 }
             } else {
                 console.log(`Instagram перенаправил бота куда-то не туда: «${page.url()}»`)
-                return
+                return false
             }
         } else {
             try {
-            await page.waitForSelector(selector)
-            element = await page.$(selector)
+                await page.waitForSelector(selector)
+                element = await page.$(selector)
             } catch {
                 context.send('Я не долждался когда загрузится нужная страница поэтому хуй вам, а не скриншот')
 
@@ -122,14 +159,14 @@ const getScreenshot = async (link, socnet, context) => {
             }, wrapSelector)
         } else if (socnet == 'inst') {
             try {
-            element = await page.$(selector)
-            await page.$$eval('[style="width: 100%;"]', ([div]) => {
-                if (div && /Войдите/.test(div.textContent)) {
-                    if (div.querySelector('button')) {
-                        div.querySelector('button').click()
+                element = await page.$(selector)
+                await page.$$eval('[style="width: 100%;"]', ([div]) => {
+                    if (div && /Войдите/.test(div.textContent)) {
+                        if (div.querySelector('button')) {
+                            div.querySelector('button').click()
+                        }
                     }
-                }
-            })
+                })
             } catch (e) {
                 context.send('Цукерберг опять ставит палки в колёса маленькому боту поэтому хуй вам, а не скриншот')
 
@@ -139,6 +176,24 @@ const getScreenshot = async (link, socnet, context) => {
                     text: `Бот не смог в инстаграм: ${link}\n\n🌍: ${globalThis.link}\n\n${e.message}\n\n${e.stack}`
                 })
                 return false
+            }
+        } else if (socnet == 'tw') {
+            try {
+                const frame = await element.contentFrame()
+                const content = fs.readFileSync('./tw.css', 'utf8')
+                await frame.addStyleTag({content})
+            } catch (e) {
+                //console.log(JSON.stringify(e, null, 4))
+                transporter.sendMail({
+                    text: `Бот словил ошибку во время добавления стилей в Твитор: ${e.message}\n\n\ne.stack` +
+                        JSON.stringify(e, null, 4),
+                    /* attachments: [{
+                        filename: 'Error screenshot.png',
+                        path: path.resolve('error_screenshot.png')
+                    }] */
+                }).catch(
+                    () => {} //console.log('Ошибка отпраки почты из-за тви')
+                )
             }
         }
 
@@ -176,7 +231,7 @@ const makeScreenshotAndSend = async (link, socnet, context) => {
     if (result === false) {
         return
     } else {
-    context.sendPhotos({value: 'screenshot.png'})//.then(() => process.exit())
+        context.sendPhotos({value: 'screenshot.png'})//.then(() => process.exit())
     }
 }
 
@@ -234,7 +289,7 @@ await page.setViewport({
     height: 1920
 })
 
-await page.setDefaultTimeout(60000)
+await page.setDefaultTimeout(TIMEOUT)
 
 globalThis.page = page
 
@@ -313,11 +368,12 @@ process.on('unhandledRejection', (reason, p) => {
 })
 
 process.on('SIGTERM', (reason, p) => {
-    transporter.sendMail({
-        ...MAIL_DEFAULTS,
-        subject: MAIL_DEFAULTS.subject + ': SIGTERM',
-        text: `Бот умер из-за завершения процесса Node: ${reason}`
-    }, () => process.exit(0))
+    console.log('Получена команда SIGTERM')
+    // transporter.sendMail({
+        // ...MAIL_DEFAULTS,
+        // subject: MAIL_DEFAULTS.subject + ': SIGTERM',
+        // text: `Бот умер из-за завершения процесса Node: ${reason}`
+    // }, () => process.exit(0))
 })
 
 process.on('SIGINT', (reason, p) => {
