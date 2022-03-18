@@ -6,7 +6,7 @@ import {VK} from 'vk-io'
 import {HearManager} from '@vk-io/hear'
 import nodemailer from 'nodemailer'
 
-import token from './token.js'
+import {token, creds} from './creds'
 
 if (/ubuntu/i.test(os.version())) {
     try {
@@ -83,7 +83,7 @@ const getScreenshot = async (link, socnet, context) => {
                 socnet == 'inst' &&
                 page.url().includes('https://www.instagram.com/accounts/login/')
             ) {
-                const creds = ['USERNAME', 'PASSWORD']
+                const creds = creds[socnet]
                 try {
                     let counter = 0
                     await page.screenshot({
