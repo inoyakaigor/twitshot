@@ -6,7 +6,7 @@ import {VK} from 'vk-io'
 import {HearManager} from '@vk-io/hear'
 import nodemailer from 'nodemailer'
 
-import {token, creds} from './creds'
+import {token, creds} from './creds.js'
 
 if (/ubuntu/i.test(os.version())) {
     try {
