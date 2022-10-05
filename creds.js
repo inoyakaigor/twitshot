@@ -2,8 +2,7 @@
 const creds = {
     inst: ['login', 'password']
 }
-export creds
 
 // токен группы
 const token = ''
-export token
+export {creds, token}

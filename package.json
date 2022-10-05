@@ -4,15 +4,15 @@
   "description": "Tweet shotter",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
-  "author": "Igor «InoY» Zvyagintsev",
+  "author": "Igor «InoY» Zviagintsev",
   "private": true,
   "type": "module",
   "dependencies": {
     "@vk-io/hear": "^1.0.2",
-    "nodemailer": "^6.7.2",
-    "puppeteer": "^13.5.1",
-    "vk-io": "^4.5.2"
+    "nodemailer": "^6.8.0",
+    "puppeteer": "^18.1.0",
+    "vk-io": "^4.7.0"
   }
 }
