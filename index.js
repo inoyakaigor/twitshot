@@ -277,10 +277,14 @@ const MAIL_DEFAULTS = {
 
 ;( async () => {
 
-const browser = await puppeteer.launch({
+
+const puppeteerConfig = {
+    executablePath: os.platform() == 'linux' ? '/usr/bin/google-chrome' : undefined,
     headless: true,
     args: ['--window-size=1280,1920', '--no-sandbox'/*, '--disable-setuid-sandbox'*/]
-})
+}
+
+const browser = await puppeteer.launch(puppeteerConfig)
 
 const page = await browser.newPage()
 
@@ -337,7 +341,7 @@ vk.updates.on('message', async (context, next) => {
 
 async function run() {
     await vk.updates.startPolling()
-    console.log('Бот запущен')
+    console.log('🤖🏃🏻‍♀️ Бот запущен')
 
     Object.keys(SOC_NETS).forEach(socnet => {
         hearManager.hear(SOC_NETS[socnet].regexp, makeScreenshot.bind(this, socnet))
@@ -351,6 +355,7 @@ run().catch(
 })()
 
 process.on('uncaughtException', (reason, p) => {
+    console.log(`Бот умер из-за непойманного исключения: ${reason}`)
     transporter.sendMail({
         ...MAIL_DEFAULTS,
         subject: MAIL_DEFAULTS.subject + ': uncaughtException',
@@ -359,6 +364,7 @@ process.on('uncaughtException', (reason, p) => {
 })
 
 process.on('unhandledRejection', (reason, p) => {
+    console.log(`Бот умер из-за необработанного исключения: ${reason}`)
     transporter.sendMail({
         ...MAIL_DEFAULTS,
         subject: MAIL_DEFAULTS.subject + ': unhandledRejection',
@@ -368,7 +374,7 @@ process.on('unhandledRejection', (reason, p) => {
 })
 
 process.on('SIGTERM', (reason, p) => {
-    console.log('Получена команда SIGTERM')
+    console.log(`Получена команда SIGTERM: ${reason}`)
     // transporter.sendMail({
         // ...MAIL_DEFAULTS,
         // subject: MAIL_DEFAULTS.subject + ': SIGTERM',
@@ -377,6 +383,7 @@ process.on('SIGTERM', (reason, p) => {
 })
 
 process.on('SIGINT', (reason, p) => {
+    console.log(`Бот умер из-за сигнала прерывания процесса: ${reason}`)
     transporter.sendMail({
         ...MAIL_DEFAULTS,
         subject: MAIL_DEFAULTS.subject + ': SIGINT',
@@ -384,10 +391,11 @@ process.on('SIGINT', (reason, p) => {
     }, () => process.exit(0))
 })
 
-/*process.on('exit', (reason, p) => {
-    transporter.sendMail({
-        ...MAIL_DEFAULTS,
-        subject: MAIL_DEFAULTS.subject + ': EXIT',
-        text: `Бот умер из-за остановки процесса: ${reason}`
-    }, () => process.exit(0))
-})*/
+/* process.on('exit', (reason, p) => {
+    console.log(`Бот умер из-за остановки процесса: ${reason}`)
+    // transporter.sendMail({
+    //     ...MAIL_DEFAULTS,
+    //     subject: MAIL_DEFAULTS.subject + ': EXIT',
+    //     text: `Бот умер из-за остановки процесса: ${reason}`
+    // }, () => process.exit(0))
+}) */
