@@ -134,7 +134,13 @@ const getScreenshot = async (link, socnet, context) => {
                 await page.waitForSelector(selector)
                 element = await page.$(selector)
             } catch {
-                context.send('Я не долждался когда загрузится нужная страница поэтому хуй вам, а не скриншот')
+                screenshot = await page.screenshot({
+                    path: 'screenshot.png',
+                    omitBackground: true
+                })
+
+                context.send('Я не долждался когда загрузится нужная страница, но скриншот на всякий случай запилил')
+                context.sendPhotos({value: 'screenshot.png'})
 
                 transporter.sendMail({
                     ...MAIL_DEFAULTS,
@@ -368,12 +374,15 @@ process.on('unhandledRejection', (reason, p) => {
 })
 
 process.on('SIGTERM', (reason, p) => {
-    console.log('Получена команда SIGTERM')
-    // transporter.sendMail({
-        // ...MAIL_DEFAULTS,
-        // subject: MAIL_DEFAULTS.subject + ': SIGTERM',
-        // text: `Бот умер из-за завершения процесса Node: ${reason}`
-    // }, () => process.exit(0))
+    try{
+        console.log('Получена команда SIGTERM')
+    } catch {
+        transporter.sendMail({
+            ...MAIL_DEFAULTS,
+            subject: MAIL_DEFAULTS.subject + ': SIGTERM',
+            text: `Бот умер из-за завершения процесса Node: ${reason}`
+        }, () => process.exit(0))
+    }
 })
 
 process.on('SIGINT', (reason, p) => {
